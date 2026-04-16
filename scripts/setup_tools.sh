@@ -13,6 +13,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TOOLS_PREFIX="${TOOLS_PREFIX:-$PROJECT_DIR/.tools}"
 REPOS_DIR="$SCRIPT_DIR/repos"
+VARIANT="${VARIANT:-}"
+
+refresh_all_submodules() {
+    echo "[1/6] Refreshing git submodules..."
+    git -C "$PROJECT_DIR" submodule sync --recursive
+    git -C "$PROJECT_DIR" submodule update --init --recursive
+}
 
 ensure_repo_submodule() {
     local rel_path="$1"
@@ -25,13 +32,15 @@ ensure_repo_submodule() {
 
 # ── Brew packages ──────────────────────────────────────────────
 
-echo "[1/5] Checking brew packages..."
+refresh_all_submodules
 
-BREW_PACKAGES=(aria2 gnu-tar openssl@3 ldid-procursus sshpass)
+echo "[2/6] Checking brew packages..."
+
+BREW_PACKAGES=(aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone libusb ipsw git-lfs python@3.13)
 BREW_MISSING=()
 
 for pkg in "${BREW_PACKAGES[@]}"; do
-    if ! brew list "$pkg" &>/dev/null; then
+    if ! brew list --formula "$pkg" &>/dev/null; then
         BREW_MISSING+=("$pkg")
     fi
 done
@@ -45,7 +54,7 @@ fi
 
 # ── Trustcache ─────────────────────────────────────────────────
 
-echo "[2/5] trustcache"
+echo "[3/6] trustcache"
 
 TRUSTCACHE_BIN="$TOOLS_PREFIX/bin/trustcache"
 if [[ -x "$TRUSTCACHE_BIN" ]]; then
@@ -74,7 +83,7 @@ fi
 
 # ── insert_dylib ───────────────────────────────────────────────
 
-echo "[3/5] insert_dylib"
+echo "[4/6] insert_dylib"
 
 INSERT_DYLIB_BIN="$TOOLS_PREFIX/bin/insert_dylib"
 if [[ -x "$INSERT_DYLIB_BIN" ]]; then
@@ -90,15 +99,13 @@ fi
 
 # ── Python venv ────────────────────────────────────────────────
 
-echo "[4/5] Python venv"
+echo "[5/6] Python venv"
 zsh "$SCRIPT_DIR/setup_venv.sh"
 
 # ── APFS sealvolume (patchless variant only) ──────────────────────
 
-VARIANT="${VARIANT:-}"
-
 if [[ "$VARIANT" == "less" ]]; then
-    echo "[5/5] apfs sealvolume"
+    echo "[6/6] apfs sealvolume"
     if [[ -f "$TOOLS_PREFIX/apfs_sealvolume" ]]; then
         echo "  apfs_sealvolume already present"
     else
@@ -123,7 +130,7 @@ if [[ "$VARIANT" == "less" ]]; then
         codesign --force --sign - "$TOOLS_PREFIX/apfs_sealvolume"
     fi
 else
-    echo "[5/5] apfs sealvolume (skipped — patchless variant only)"
+    echo "[6/6] apfs sealvolume (skipped — patchless variant only)"
 fi
 
 echo ""

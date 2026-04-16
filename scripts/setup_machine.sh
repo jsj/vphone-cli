@@ -703,7 +703,7 @@ install_brew_deps() {
   require_cmd brew
 
   local deps=(
-    wget gnu-tar openssl@3 ldid-procursus sshpass keystone git-lfs
+    aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone git-lfs
     python@3.13 libusb ipsw
   )
 

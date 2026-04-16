@@ -52,6 +52,7 @@ KERNEL_FOURCC = "rkrn"
 RAMDISK_KERNEL_SUFFIX = ".ramdisk"
 RAMDISK_KERNEL_IMG4 = "krnl.ramdisk.img4"
 SUDO_PASSWORD = os.environ.get("VPHONE_SUDO_PASSWORD", None)
+SUDO_ASKPASS = os.environ.get("SUDO_ASKPASS", None)
 
 # Files to remove from ramdisk to save space
 RAMDISK_REMOVE = [
@@ -157,7 +158,10 @@ def run(cmd, **kwargs):
 
 
 def run_sudo(cmd, **kwargs):
-    """Run sudo command non-interactively using VPHONE_SUDO_PASSWORD."""
+    """Run sudo command, preferring askpass when available."""
+    if SUDO_ASKPASS:
+        env = dict(os.environ)
+        return run(["sudo", "-A", *cmd], env=env, **kwargs)
     if SUDO_PASSWORD:
         return run(
             ["sudo", "-S", *cmd],
