@@ -72,8 +72,14 @@ def find_cloudos(identities, device_class):
 def find_iphone_erase(identities):
     """Return the index of the first iPhone erase identity."""
     for i, bi in enumerate(identities):
-        var = bi.get("Info", {}).get("Variant", "").lower()
-        if "research" not in var and "upgrade" not in var and "recovery" not in var:
+        info = bi.get("Info", {})
+        var = info.get("Variant", "").lower()
+        if (
+            "research" not in var
+            and "upgrade" not in var
+            and "recovery" not in var
+            and info.get("RestoreBehavior") == "Erase"
+        ):
             return i
     raise KeyError("No erase identity found in iPhone manifest")
 
@@ -88,12 +94,12 @@ def main():
         print(f"Usage: {sys.argv[0]} <iphone_dir> <cloudos_dir>", file=sys.stderr)
         sys.exit(1)
 
-    iphone_dir, cloudos_dir = sys.argv[1], sys.argv[2]
+    output_dir, cloudos_dir = sys.argv[1], sys.argv[2]
 
     cloudos_bm = load(os.path.join(cloudos_dir, "BuildManifest.plist"))
-    iphone_bm = load(os.path.join(iphone_dir, "BuildManifest.plist"))
+    iphone_bm = load(os.path.join("ipsws", "iPhone17,3_26.1_23B85_Restore", "BuildManifest.plist"))
     cloudos_rp = load(os.path.join(cloudos_dir, "Restore.plist"))
-    iphone_rp = load(os.path.join(iphone_dir, "Restore.plist"))
+    iphone_rp = load(os.path.join("ipsws", "iPhone17,3_26.1_23B85_Restore", "Restore.plist"))
 
     C = cloudos_bm["BuildIdentities"]
     I = iphone_bm["BuildIdentities"]
@@ -110,16 +116,17 @@ def main():
     print(f"  iPhone  erase: #{I_ERASE}")
 
     # ── Build the single DFU erase identity ──────────────────────────
-    # Identity base from vresearch101ap PROD — must match DFU hardware
-    # (BDID 0x90) for TSS/SHSH signing.
+    # Start from the cloudOS vresearch101 release identity so Apple TSS sees
+    # the expected PCC-signed fields, then overlay only the iPhone OS /
+    # userspace components we need for bootstrap.
     bi = copy.deepcopy(C[PROD])
-    bi["Manifest"] = {}
     bi["Ap,ProductType"] = "ComputeModule14,2"
     bi["Ap,Target"] = "VRESEARCH101AP"
     bi["Ap,TargetType"] = "vresearch101"
     bi["ApBoardID"] = "0x90"
     bi["ApChipID"] = "0xFE01"
     bi["ApSecurityDomain"] = "0x01"
+    bi["Info"]["DeviceClass"] = "vresearch101ap"
     for k in ("NeRDEpoch", "RestoreAttestationMode"):
         bi.pop(k, None)
         bi.get("Info", {}).pop(k, None)
@@ -160,32 +167,70 @@ def main():
     m["Ap,SecurePageTableMonitor"] = entry(C, PROD, "Ap,SecurePageTableMonitor")
     m["Ap,TrustedExecutionMonitor"] = entry(C, RES, "Ap,TrustedExecutionMonitor")
 
-    # ── Device tree (vphone600ap — sets MKB dt=1 for keybag-less boot)
+    # ── Runtime install payloads (vphone600ap — keybag-less boot on installed OS)
     m["DeviceTree"] = entry(C, VP, "DeviceTree")
-    m["RestoreDeviceTree"] = entry(C, VP, "RestoreDeviceTree")
-
-    # ── SEP (vphone600 — matches device tree) ────────────────────────
     m["SEP"] = entry(C, VP, "SEP")
-    m["RestoreSEP"] = entry(C, VP, "RestoreSEP")
-
-    # ── Kernel (vphone600, patched by the Swift firmware pipeline) ─────
     m["KernelCache"] = entry(C, VPR, "KernelCache")  # research
-    m["RestoreKernelCache"] = entry(C, VP, "RestoreKernelCache")  # release
+
+    # ── Restore-stage payloads (vresearch101ap — keep restore handoff board-consistent)
+    m["RestoreDeviceTree"] = entry(C, PROD, "RestoreDeviceTree")
+    m["RestoreSEP"] = entry(C, PROD, "RestoreSEP")
+    m["RestoreKernelCache"] = entry(C, PROD, "RestoreKernelCache")
 
     # ── Recovery mode (vphone600ap carries this entry) ────────────────
     m["RecoveryMode"] = entry(C, VP, "RecoveryMode")
+
+    # ── EAN / early boot visual + accessory assets (required during update_ean)
+    # Keep these from the iPhone erase identity because restored requests them
+    # from the active build identity during PersonalizedBootObjectV3 / EANData.
+    for key in (
+        "Ap,AudioBootChime",
+        "Ap,LowPowerMode",
+        "AppleLogo",
+        "DCP",
+        "Liquid",
+        "WCHFirmwareUpdater",
+    ):
+        if key in I[I_ERASE]["Manifest"]:
+            m[key] = entry(I, I_ERASE, key)
 
     # ── CloudOS erase ramdisk ────────────────────────────────────────
     m["RestoreRamDisk"] = entry(C, PROD, "RestoreRamDisk")
     m["RestoreTrustCache"] = entry(C, PROD, "RestoreTrustCache")
 
-    # ── iPhone OS image ──────────────────────────────────────────────
+    # ── iPhone OS / userspace bootstrap (preserve required cryptex fields)
+    # Copy only the OS-side payload entries plus the matching size/variant
+    # metadata required for userspace bootstrap, while keeping the PCC/TSS
+    # identity fields from the cloudOS base.
+    for key, value in I[I_ERASE].items():
+        if key.startswith("Cryptex1,"):
+            bi[key] = copy.deepcopy(value)
+
     m["Ap,SystemVolumeCanonicalMetadata"] = entry(
         I, I_ERASE, "Ap,SystemVolumeCanonicalMetadata"
     )
+    m["Cryptex1,AppOS"] = entry(I, I_ERASE, "Cryptex1,AppOS")
+    m["Cryptex1,AppTrustCache"] = entry(I, I_ERASE, "Cryptex1,AppTrustCache")
+    m["Cryptex1,AppVolume"] = entry(I, I_ERASE, "Cryptex1,AppVolume")
+    m["Cryptex1,SystemOS"] = entry(I, I_ERASE, "Cryptex1,SystemOS")
+    m["Cryptex1,SystemTrustCache"] = entry(I, I_ERASE, "Cryptex1,SystemTrustCache")
+    m["Cryptex1,SystemVolume"] = entry(I, I_ERASE, "Cryptex1,SystemVolume")
     m["OS"] = entry(I, I_ERASE, "OS")
     m["StaticTrustCache"] = entry(I, I_ERASE, "StaticTrustCache")
     m["SystemVolume"] = entry(I, I_ERASE, "SystemVolume")
+
+    for info_key in (
+        "Cryptex1,AppOSSize",
+        "Cryptex1,SystemOSSize",
+        "MinimumSystemPartition",
+        "OSDiskImageSize",
+        "OSVarContentSize",
+        "RecoveryVariant",
+        "RequiresNonceSlot",
+        "RequiresUIDMode",
+    ):
+        if info_key in I[I_ERASE]["Info"]:
+            bi["Info"][info_key] = copy.deepcopy(I[I_ERASE]["Info"][info_key])
 
     # ── Assemble BuildManifest ───────────────────────────────────────
     build_manifest = {
@@ -227,7 +272,7 @@ def main():
         ("BuildManifest.plist", build_manifest),
         ("Restore.plist", restore),
     ]:
-        path = os.path.join(iphone_dir, name)
+        path = os.path.join(output_dir, name)
         with open(path, "wb") as f:
             plistlib.dump(data, f, sort_keys=True)
         print(f"  wrote {name}")

@@ -717,9 +717,27 @@ def main():
     )
     print(f"  [+] iBEC.vresearch101.RELEASE.img4")
 
-    # ── 3. SPTM (sign only) ─────────────────────────────────────
+    # ── 3. RecoveryMode (sign only) ─────────────────────────────
     print(f"\n{'=' * 60}")
-    print(f"  3. SPTM (sign only)")
+    print(f"  3. RecoveryMode (sign only)")
+    print(f"{'=' * 60}")
+    recovery_mode_src = find_file(
+        restore_dir,
+        [
+            "Firmware/all_flash/recoverymode@2556~iphone-USBc.im4p",
+        ],
+        "RecoveryMode",
+    )
+    sign_img4(
+        recovery_mode_src,
+        os.path.join(output_dir, "recoverymode.img4"),
+        im4m_path,
+    )
+    print(f"  [+] recoverymode.img4")
+
+    # ── 4. SPTM (sign only) ─────────────────────────────────────
+    print(f"\n{'=' * 60}")
+    print(f"  4. SPTM (sign only)")
     print(f"{'=' * 60}")
     sptm_src = find_file(
         restore_dir,
@@ -736,9 +754,9 @@ def main():
     )
     print(f"  [+] sptm.vresearch1.release.img4")
 
-    # ── 4. DeviceTree (sign only) ────────────────────────────────
+    # ── 5. DeviceTree (sign only) ────────────────────────────────
     print(f"\n{'=' * 60}")
-    print(f"  4. DeviceTree (sign only)")
+    print(f"  5. DeviceTree (sign only)")
     print(f"{'=' * 60}")
     dt_src = find_file(
         restore_dir,
@@ -755,28 +773,28 @@ def main():
     )
     print(f"  [+] DeviceTree.vphone600ap.img4")
 
-    # ── 5. SEP (sign only) ───────────────────────────────────────
+    # ── 6. SEP (sign only) ───────────────────────────────────────
     print(f"\n{'=' * 60}")
-    print(f"  5. SEP (sign only)")
+    print(f"  6. SEP (sign only)")
     print(f"{'=' * 60}")
     sep_src = find_file(
         restore_dir,
         [
-            "Firmware/all_flash/sep-firmware.vresearch101.RELEASE.im4p",
+            "Firmware/all_flash/sep-firmware.vphone600.RELEASE.im4p",
         ],
         "SEP",
     )
     sign_img4(
         sep_src,
-        os.path.join(output_dir, "sep-firmware.vresearch101.RELEASE.img4"),
+        os.path.join(output_dir, "sep-firmware.vphone600.RELEASE.img4"),
         im4m_path,
         tag="rsep",
     )
-    print(f"  [+] sep-firmware.vresearch101.RELEASE.img4")
+    print(f"  [+] sep-firmware.vphone600.RELEASE.img4")
 
-    # ── 6. TXM (release variant — needs patching) ────────────────
+    # ── 7. TXM (release variant — needs patching) ────────────────
     print(f"\n{'=' * 60}")
-    print(f"  6. TXM (patch release variant)")
+    print(f"  7. TXM (patch release variant)")
     print(f"{'=' * 60}")
     txm_src = find_file(
         restore_dir,

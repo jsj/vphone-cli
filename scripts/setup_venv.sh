@@ -14,8 +14,28 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
 REQUIREMENTS="${PROJECT_ROOT}/requirements.txt"
 
-# Use system Python3
-PYTHON="$(command -v python3)"
+# Prefer modern Homebrew Python, then fall back to PATH.
+PYTHON_CANDIDATES=(
+    /opt/homebrew/opt/python@3.14/libexec/bin/python3
+    /opt/homebrew/bin/python3.14
+    /opt/homebrew/opt/python@3.13/libexec/bin/python3
+    /opt/homebrew/bin/python3.13
+    /opt/homebrew/opt/python@3.12/libexec/bin/python3
+    /opt/homebrew/bin/python3.12
+)
+
+PYTHON=""
+for candidate in "${PYTHON_CANDIDATES[@]}"; do
+    if [[ -x "${candidate}" ]]; then
+        PYTHON="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${PYTHON}" ]]; then
+    PYTHON="$(command -v python3 || true)"
+fi
+
 if [[ -z "${PYTHON}" ]]; then
     echo "Error: python3 not found in PATH"
     exit 1
@@ -32,8 +52,8 @@ echo ""
 
 # Activate and install pip packages
 source "${VENV_DIR}/bin/activate"
-pip install --upgrade pip >/dev/null
-pip install -r "${REQUIREMENTS}"
+python3 -m pip install --upgrade pip >/dev/null
+python3 -m pip install -r "${REQUIREMENTS}"
 
 # --- Build keystone native library ---
 # The keystone-engine pip package is Python bindings only.

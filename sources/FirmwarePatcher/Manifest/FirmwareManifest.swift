@@ -172,10 +172,12 @@ public enum FirmwareManifest {
     /// Return the index of the first iPhone erase identity.
     static func findIPhoneErase(_ identities: [PlistDict]) throws -> Int {
         for (i, bi) in identities.enumerated() {
-            let variant = ((bi["Info"] as? PlistDict)?["Variant"] as? String ?? "").lowercased()
+            let info = bi["Info"] as? PlistDict ?? [:]
+            let variant = (info["Variant"] as? String ?? "").lowercased()
             if !variant.contains("research"),
                !variant.contains("upgrade"),
-               !variant.contains("recovery")
+               !variant.contains("recovery"),
+               info["RestoreBehavior"] as? String == "Erase"
             {
                 return i
             }
@@ -214,6 +216,10 @@ public enum FirmwareManifest {
         bi["ApBoardID"] = "0x90"
         bi["ApChipID"] = "0xFE01"
         bi["ApSecurityDomain"] = "0x01"
+        if var info = bi["Info"] as? PlistDict {
+            info["DeviceClass"] = "vresearch101ap"
+            bi["Info"] = info
+        }
 
         // Remove NeRDEpoch and RestoreAttestationMode from top-level and Info.
         for key in ["NeRDEpoch", "RestoreAttestationMode"] {
@@ -261,30 +267,72 @@ public enum FirmwareManifest {
         m["Ap,SecurePageTableMonitor"] = try entry(C, prod, "Ap,SecurePageTableMonitor")
         m["Ap,TrustedExecutionMonitor"] = try entry(C, res, "Ap,TrustedExecutionMonitor")
 
-        // Device tree (vphone600ap -- sets MKB dt=1 for keybag-less boot).
+        // Runtime install payloads (vphone600ap -- sets MKB dt=1 for installed OS boot).
         m["DeviceTree"] = try entry(C, vp, "DeviceTree")
-        m["RestoreDeviceTree"] = try entry(C, vp, "RestoreDeviceTree")
-
-        // SEP (vphone600 -- matches device tree).
         m["SEP"] = try entry(C, vp, "SEP")
-        m["RestoreSEP"] = try entry(C, vp, "RestoreSEP")
-
-        // Kernel (vphone600, patched by fw_patch).
         m["KernelCache"] = try entry(C, vpr, "KernelCache") // research
-        m["RestoreKernelCache"] = try entry(C, vp, "RestoreKernelCache") // release
+
+        // Restore-stage payloads (vresearch101ap -- keep restore handoff board-consistent).
+        m["RestoreDeviceTree"] = try entry(C, prod, "RestoreDeviceTree")
+        m["RestoreSEP"] = try entry(C, prod, "RestoreSEP")
+        m["RestoreKernelCache"] = try entry(C, prod, "RestoreKernelCache")
 
         // Recovery mode (vphone600ap carries this entry).
         m["RecoveryMode"] = try entry(C, vp, "RecoveryMode")
+
+        // EAN / early boot visual + accessory assets (required during update_ean).
+        for key in [
+            "Ap,AudioBootChime",
+            "Ap,LowPowerMode",
+            "AppleLogo",
+            "DCP",
+            "Liquid",
+            "WCHFirmwareUpdater",
+        ] {
+            if (I[iErase]["Manifest"] as? PlistDict)?[key] != nil {
+                m[key] = try entry(I, iErase, key)
+            }
+        }
 
         // CloudOS erase ramdisk.
         m["RestoreRamDisk"] = try entry(C, prod, "RestoreRamDisk")
         m["RestoreTrustCache"] = try entry(C, prod, "RestoreTrustCache")
 
-        // iPhone OS image.
+        // iPhone OS / userspace bootstrap.
+        for (key, value) in I[iErase] where key.hasPrefix("Cryptex1,") {
+            bi[key] = deepCopyAny(value)
+        }
+
         m["Ap,SystemVolumeCanonicalMetadata"] = try entry(I, iErase, "Ap,SystemVolumeCanonicalMetadata")
+        m["Cryptex1,AppOS"] = try entry(I, iErase, "Cryptex1,AppOS")
+        m["Cryptex1,AppTrustCache"] = try entry(I, iErase, "Cryptex1,AppTrustCache")
+        m["Cryptex1,AppVolume"] = try entry(I, iErase, "Cryptex1,AppVolume")
+        m["Cryptex1,SystemOS"] = try entry(I, iErase, "Cryptex1,SystemOS")
+        m["Cryptex1,SystemTrustCache"] = try entry(I, iErase, "Cryptex1,SystemTrustCache")
+        m["Cryptex1,SystemVolume"] = try entry(I, iErase, "Cryptex1,SystemVolume")
         m["OS"] = try entry(I, iErase, "OS")
         m["StaticTrustCache"] = try entry(I, iErase, "StaticTrustCache")
         m["SystemVolume"] = try entry(I, iErase, "SystemVolume")
+
+        if var info = bi["Info"] as? PlistDict,
+           let iPhoneInfo = I[iErase]["Info"] as? PlistDict
+        {
+            for key in [
+                "Cryptex1,AppOSSize",
+                "Cryptex1,SystemOSSize",
+                "MinimumSystemPartition",
+                "OSDiskImageSize",
+                "OSVarContentSize",
+                "RecoveryVariant",
+                "RequiresNonceSlot",
+                "RequiresUIDMode",
+            ] {
+                if let value = iPhoneInfo[key] {
+                    info[key] = deepCopyAny(value)
+                }
+            }
+            bi["Info"] = info
+        }
 
         bi["Manifest"] = m
         return bi

@@ -18,6 +18,17 @@ Virtual iPhone boot tool using Apple's Virtualization.framework with PCC researc
 - Do not create, read, or update `/TODO.md`.
 - Ignore `/TODO.md` if it exists locally; it is intentionally not part of the repo workflow anymore.
 - Track plan, progress, assumptions, blockers, and next actions in commit history, code comments when warranted, and current research docs instead of a repo TODO file.
+- For the current restore-debugging effort, do not make broad restore policy changes across multiple stages at once. Treat the workflow as three separate layers: (1) DFU -> recovery transition, (2) recovery firmware acceptance, and (3) later restore-mode / TSS requests.
+- When debugging restore, always first identify the current failing layer and keep all work scoped to that layer until it is stable again.
+- Prefer regression isolation over speculative fixes: compare against the last known-good stage, change one narrow thing, rerun immediately, and only then decide the next step.
+- Do not mix fixes for `Cryptex1LocalPolicy` / late TSS with fixes for DFU or recovery firmware in the same iteration.
+- Treat these as invariants for future restore sessions:
+  - DFU boot-chain components (`iBSS`, `iBEC`, and related early entry components) must stay on one explicit source identity with no fallback while debugging entry failures.
+  - Recovery boot-chain components (`Ap,RestoreSecurePageTableMonitor`, `Ap,RestoreTrustedExecutionMonitor`, `RestoreTrustCache`, `RestoreRamDisk`, `RestoreDeviceTree`, `RestoreSEP`, `RestoreKernelCache`) must stay on one explicit source identity with no fallback while debugging pre-restore recovery failures.
+  - Late restore assets (OS/cryptex/userspace payloads) are the only place where fallback policies should be explored, and only after DFU/recovery boot is stable.
+- The required debug loop is: reproduce one exact failure -> capture component metadata / logs at that stage -> compare to the last known-good behavior -> change one narrow thing at the same stage -> rerun immediately.
+- A previously observed milestone matters: the full pre-restore chain has already succeeded once (`Ap,RestoreSecurePageTableMonitor`, `Ap,RestoreTrustedExecutionMonitor`, `RestoreTrustCache`, `RestoreRamDisk`, `RestoreDeviceTree`, `RestoreSEP`, `RestoreKernelCache`). Treat that as evidence that the sequence itself can work; focus on regressions in sourcing/personalization rather than assuming the whole approach is wrong.
+- Do not restart from the older generic framing (“libusb crash” or “generic devicetree failure”) unless a fresh repro specifically points there again.
 
 For any changes applying new patches, also update research/0_binary_patch_comparison.md. Dont forget this.
 
