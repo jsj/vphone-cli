@@ -23,6 +23,8 @@ set -euo pipefail
 VM_DIR="${1:-.}"
 SCRIPT_DIR="${0:a:h}"
 CFW_SKIP_HALT="${CFW_SKIP_HALT:-0}"
+SUDO_PASSWORD="${SUDO_PASSWORD:-${VPHONE_SUDO_PASSWORD:-}}"
+SUDO_ASKPASS="${SUDO_ASKPASS:-}"
 
 # Resolve absolute paths
 VM_DIR="$(cd "$VM_DIR" && pwd)"
@@ -68,6 +70,16 @@ SSH_OPTS=(
 die() {
     echo "[-] $*" >&2
     exit 1
+}
+
+run_sudo() {
+    if [[ -n "$SUDO_ASKPASS" ]]; then
+        sudo -A "$@"
+    elif [[ -n "$SUDO_PASSWORD" ]]; then
+        printf '%s\n' "$SUDO_PASSWORD" | sudo -S "$@"
+    else
+        sudo "$@"
+    fi
 }
 
 check_prerequisites() {
@@ -154,7 +166,7 @@ ldid_sign() {
 safe_detach() {
     local mnt="$1"
     if mount | grep -Fq " on $mnt "; then
-        sudo hdiutil detach -force "$mnt" 2>/dev/null || true
+        run_sudo hdiutil detach -force "$mnt" 2>/dev/null || true
     fi
 }
 
@@ -329,9 +341,9 @@ else
     assert_mount_under_vm "$MNT_APPOS" "AppOS mountpoint"
 
     echo "  Mounting SystemOS..."
-    sudo hdiutil attach -mountpoint "$MNT_SYSOS" "$SYSOS_DMG" -nobrowse -owners off
+    run_sudo hdiutil attach -mountpoint "$MNT_SYSOS" "$SYSOS_DMG" -nobrowse -owners off
     echo "  Mounting AppOS..."
-    sudo hdiutil attach -mountpoint "$MNT_APPOS" "$APPOS_DMG" -nobrowse -owners off
+    run_sudo hdiutil attach -mountpoint "$MNT_APPOS" "$APPOS_DMG" -nobrowse -owners off
 
     ssh_cmd "/bin/rm -rf /mnt1/System/Cryptexes/App /mnt1/System/Cryptexes/OS"
     ssh_cmd "/bin/mkdir -p /mnt1/System/Cryptexes/App /mnt1/System/Cryptexes/OS"

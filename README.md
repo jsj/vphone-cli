@@ -94,7 +94,7 @@ Boot into Recovery (long press power button), open Terminal, then choose one set
 1. Brew dependencies:
 
 ```bash
-brew install aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone libusb ipsw
+brew install aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone libusb ipsw git-lfs python@3.13
 ```
 
 `scripts/fw_prepare.sh` prefers `aria2c` for faster multi-connection downloads and falls back to `curl` or `wget` when needed.
@@ -105,7 +105,11 @@ brew install aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone libusb
 
 ```bash
 git clone --recurse-submodules https://github.com/Lakr233/vphone-cli.git
+# or, if you already cloned:
+git submodule update --init --recursive
 ```
+
+`make setup_tools` also re-syncs and refreshes submodules before building local toolchain components.
 
 ## Quick Start
 
@@ -115,6 +119,7 @@ make setup_machine            # full automation through "First Boot" (includes r
 # LESS=1 for patchless variant (- AMFI, SSV, Img4, TXM bypasses) 
 # DEV=1 for dev variant (+ TXM entitlement/debug bypasses)
 # JB=1 for jailbreak variant (+ full security bypass)
+# includes: brew dependency install, submodule refresh, project build, firmware preflight/setup
 ```
 
 ## Manual Setup
@@ -122,6 +127,7 @@ make setup_machine            # full automation through "First Boot" (includes r
 ```bash
 make setup_tools              # install brew deps, build trustcache + insert_dylib, create Python venv (pymobiledevice3, aria2c included)
 make build                    # build + sign vphone-cli
+make boot_host_preflight      # verify the host can launch the signed PV=3 binary before boot/DFU
 make vm_new                   # create VM directory with manifest (config.plist)
 # options: CPU=8 MEMORY=8192 DISK_SIZE=64
 make fw_prepare               # download IPSWs, extract, merge, generate manifest

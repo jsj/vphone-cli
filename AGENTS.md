@@ -13,6 +13,21 @@ Virtual iPhone boot tool using Apple's Virtualization.framework with PCC researc
 - **Language:** Swift 6.0 (SwiftPM), private APIs via [Dynamic](https://github.com/mhdhejazi/Dynamic)
 - **Python deps:** `capstone`, `keystone-engine`, `pyimg4` (see `requirements.txt`)
 
+## Proven JB Bring-up
+
+- **Full JB setup:** `SUDO_PASSWORD=... make setup_machine JB=1 NONE_INTERACTIVE=1`
+- **Boot existing JB VM:** `make boot`
+- **SSH forward:** `./.venv/bin/python3 -m pymobiledevice3 usbmux forward 2222 22`
+- **SSH login:** `ssh -p 2222 mobile@127.0.0.1` (password: `alpine`)
+- **Frida forward:** `./.venv/bin/python3 -m pymobiledevice3 usbmux forward 27042 27042`
+- **Local Frida tools:** `python3 -m venv .frida-venv && ./.frida-venv/bin/python -m pip install frida-tools`
+- **Frida sanity:** `./.frida-venv/bin/frida-ps -H 127.0.0.1:27042`
+- **Attach example:** `./.frida-venv/bin/frida -H 127.0.0.1:27042 -n SpringBoard`
+
+Notes:
+- After installing `openssh-server` inside the JB phone, reboot once before expecting SSH on port `22`.
+- `frida-server` was installed successfully from `frida_17.9.1_iphoneos-arm64.deb` and listens on `127.0.0.1:27042` on-device.
+
 ## Workflow Rules
 
 - Do not create, read, or update `/TODO.md`.
