@@ -49,15 +49,26 @@ class VPhoneScreenRecorder {
         writer?.status == .writing
     }
 
-    func startRecording(view: NSView) throws {
-        guard !isRecording else { return }
+    @discardableResult
+    func startRecording(view: NSView) throws -> URL {
+        let url = recordingOutputURL()
+        try startRecording(view: view, to: url)
+        return url
+    }
+
+    @discardableResult
+    func startRecording(view: NSView, to url: URL) throws -> URL {
+        guard !isRecording else { return outputURL ?? url }
 
         let source = try resolveCaptureSource(for: view)
         let captureSize = source.graphicsDisplay.sizeInPixels
         let width = max(Int(captureSize.width), 1)
         let height = max(Int(captureSize.height), 1)
 
-        let url = recordingOutputURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         outputURL = url
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
@@ -103,6 +114,7 @@ class VPhoneScreenRecorder {
         print(
             "[record] started - \(url.lastPathComponent) (\(width)x\(height), source: \(captureModeDescription))"
         )
+        return url
     }
 
     func stopRecording() async -> URL? {
@@ -155,6 +167,11 @@ class VPhoneScreenRecorder {
     func saveScreenshot(view: NSView, to url: URL) async throws -> URL {
         let cgImage = try await captureStillImage(from: view)
         let utType = url.pathExtension.lowercased() == "png" ? "public.png" : "public.jpeg"
+
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
 
         guard let dest = CGImageDestinationCreateWithURL(
             url as CFURL, utType as CFString, 1, nil

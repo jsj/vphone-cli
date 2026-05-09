@@ -14,6 +14,9 @@ import ImageIO
 /// Supported commands:
 ///   {"t":"screenshot"}                          → full-res save to Desktop (or explicit path)
 ///   {"t":"screenshot","path":"/tmp/shot.png"}   → save to explicit path (PNG/JPEG by extension)
+///   {"t":"record_start"}                        → start recording to Desktop (or explicit path)
+///   {"t":"record_start","path":"/tmp/out.mov"}  → start recording to explicit path
+///   {"t":"record_stop"}                         → stop active recording
 ///   {"t":"tap","x":645,"y":1398}                → tap at pixel coordinates
 ///   {"t":"swipe","x1":645,"y1":2600,"x2":645,"y2":1400,"ms":300}  → swipe
 ///   {"t":"key","name":"home"}                   → hardware key (home/power/volup/voldown)
@@ -260,12 +263,15 @@ class VPhoneHostControl {
                     return
                 }
                 do {
-                    if let outputPath {
-                        let url = try await recorder.saveScreenshot(view: view, to: URL(fileURLWithPath: outputPath))
-                        result.path = url.path
+                    let url = if let outputPath {
+                        try await recorder.saveScreenshot(view: view, to: URL(fileURLWithPath: outputPath))
+                    } else {
+                        try await recorder.saveScreenshot(view: view)
                     }
-                    // Always include compact image for screenshot command
-                    result.imageBase64 = await controller.captureCompactScreenshot()
+                    result.path = url.path
+                    if wantScreen {
+                        result.imageBase64 = await controller.captureCompactScreenshot()
+                    }
                     result.ok = true
                 } catch {
                     result.error = "\(error)"
@@ -278,6 +284,60 @@ class VPhoneHostControl {
             } else {
                 writeResponse(fd, ok: false, error: result.error ?? "unknown error")
             }
+
+        case "record_start":
+            let outputPath = json["path"] as? String
+            let semaphore = DispatchSemaphore(value: 0)
+            let result = ResultBox()
+
+            Task { @MainActor in
+                defer { semaphore.signal() }
+                guard let controller,
+                      let recorder = controller.screenRecorder,
+                      let view = controller.captureView,
+                      view.window != nil
+                else {
+                    result.error = "no active VM view"
+                    return
+                }
+                do {
+                    let url = if let outputPath {
+                        try recorder.startRecording(view: view, to: URL(fileURLWithPath: outputPath))
+                    } else {
+                        try recorder.startRecording(view: view)
+                    }
+                    result.path = url.path
+                    result.ok = true
+                } catch {
+                    result.error = "\(error)"
+                }
+            }
+
+            semaphore.wait()
+            writeResponse(fd, ok: result.ok, path: result.path, error: result.error)
+
+        case "record_stop":
+            let semaphore = DispatchSemaphore(value: 0)
+            let result = ResultBox()
+
+            Task { @MainActor in
+                defer { semaphore.signal() }
+                guard let controller,
+                      let recorder = controller.screenRecorder
+                else {
+                    result.error = "no active recorder"
+                    return
+                }
+                if let url = await recorder.stopRecording() {
+                    result.path = url.path
+                    result.ok = true
+                } else {
+                    result.error = "no active recording"
+                }
+            }
+
+            semaphore.wait()
+            writeResponse(fd, ok: result.ok, path: result.path, error: result.error)
 
         case "tap":
             guard let x = json["x"] as? Double, let y = json["y"] as? Double else {

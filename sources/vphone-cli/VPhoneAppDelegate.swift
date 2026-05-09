@@ -143,14 +143,16 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
                 .deletingLastPathComponent()
                 .appendingPathComponent("vphone.sock").path
             let hc = VPhoneHostControl(socketPath: socketPath)
-            hc.start(
-                captureView: wc.captureView!,
-                screenRecorder: recorder,
-                control: control,
-                screenWidth: options.screenWidth,
-                screenHeight: options.screenHeight
-            )
-            hostControl = hc
+            if let captureView = wc.captureView {
+                hc.start(
+                    captureView: captureView,
+                    screenRecorder: recorder,
+                    control: control,
+                    screenWidth: options.screenWidth,
+                    screenHeight: options.screenHeight
+                )
+                hostControl = hc
+            }
 
             // Wire location toggle through onConnect/onDisconnect
             control.onConnect = { [weak mc, weak provider = locationProvider] caps in

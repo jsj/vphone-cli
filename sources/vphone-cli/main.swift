@@ -18,6 +18,12 @@ do {
     case var patch as PatchComponentCLI:
         try patch.run()
 
+    case var screenshot as VPhoneScreenshotCLI:
+        try screenshot.run()
+
+    case var record as VPhoneRecordCLI:
+        try record.run()
+
     default:
         break
     }

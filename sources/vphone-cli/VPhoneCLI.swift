@@ -1,4 +1,5 @@
 import ArgumentParser
+import Darwin
 import FirmwarePatcher
 import Foundation
 
@@ -6,7 +7,13 @@ struct VPhoneCLI: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vphone-cli",
         abstract: "Boot a virtual iPhone or patch firmware with the Swift pipeline",
-        subcommands: [VPhoneBootCLI.self, PatchFirmwareCLI.self, PatchComponentCLI.self],
+        subcommands: [
+            VPhoneBootCLI.self,
+            VPhoneScreenshotCLI.self,
+            VPhoneRecordCLI.self,
+            PatchFirmwareCLI.self,
+            PatchComponentCLI.self,
+        ],
         defaultSubcommand: VPhoneBootCLI.self
     )
 }
@@ -56,7 +63,7 @@ struct VPhoneBootCLI: ParsableCommand {
     @Flag(name: .customLong("no-vphoned"), help: "Exclude vphoned usage (patchless-only).")
     var noVphoned: Bool = false
 
-    /// DFU mode runs headless (no GUI).
+    /// DFU mode runs without a visible GUI.
     var noGraphics: Bool {
         dfu
     }
@@ -112,6 +119,198 @@ struct VPhoneBootCLI: ParsableCommand {
     }
 
     mutating func run() throws {}
+}
+
+struct VPhoneScreenshotCLI: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "screenshot",
+        abstract: "Save a screenshot from a running vphone window"
+    )
+
+    @Option(
+        name: [.customLong("vm-directory"), .customShort("d")],
+        help: "Path to the running VM directory.",
+        transform: URL.init(fileURLWithPath:)
+    )
+    var vmDirectory: URL = URL(fileURLWithPath: "vm")
+
+    @Option(
+        name: [.customLong("output"), .customShort("o")],
+        help: "Output path. Defaults to Desktop when omitted.",
+        transform: URL.init(fileURLWithPath:)
+    )
+    var output: URL?
+
+    mutating func run() throws {
+        var command: [String: Any] = ["t": "screenshot", "screen": false]
+        if let output {
+            command["path"] = output.standardizedFileURL.path
+        }
+        let response = try VPhoneHostControlClient.send(command, vmDirectory: vmDirectory)
+        if let path = response["path"] as? String {
+            print("[screenshot] saved - \(path)")
+        } else {
+            print("[screenshot] saved")
+        }
+    }
+}
+
+struct VPhoneRecordCLI: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "record",
+        abstract: "Start or stop screen recording on a running vphone window"
+    )
+
+    @Option(
+        name: [.customLong("vm-directory"), .customShort("d")],
+        help: "Path to the running VM directory.",
+        transform: URL.init(fileURLWithPath:)
+    )
+    var vmDirectory: URL = URL(fileURLWithPath: "vm")
+
+    @Option(
+        name: [.customLong("output"), .customShort("o")],
+        help: "Output .mov path. Defaults to Desktop when omitted.",
+        transform: URL.init(fileURLWithPath:)
+    )
+    var output: URL?
+
+    @Option(help: "Seconds to record before automatically stopping.")
+    var duration: Double?
+
+    @Flag(help: "Stop an active recording.")
+    var stop: Bool = false
+
+    mutating func validate() throws {
+        if let duration, duration <= 0 {
+            throw ValidationError("`--duration` must be > 0.")
+        }
+        if stop, output != nil {
+            throw ValidationError("`--output` is only valid when starting a recording.")
+        }
+        if stop, duration != nil {
+            throw ValidationError("`--duration` is only valid when starting a recording.")
+        }
+    }
+
+    mutating func run() throws {
+        if stop {
+            let response = try VPhoneHostControlClient.send(["t": "record_stop"], vmDirectory: vmDirectory)
+            printRecordStop(response)
+            return
+        }
+
+        var command: [String: Any] = ["t": "record_start"]
+        if let output {
+            command["path"] = output.standardizedFileURL.path
+        }
+        let response = try VPhoneHostControlClient.send(command, vmDirectory: vmDirectory)
+        if let path = response["path"] as? String {
+            print("[record] started - \(path)")
+        } else {
+            print("[record] started")
+        }
+
+        if let duration {
+            Thread.sleep(forTimeInterval: duration)
+            let stopResponse = try VPhoneHostControlClient.send(["t": "record_stop"], vmDirectory: vmDirectory)
+            printRecordStop(stopResponse)
+        }
+    }
+
+    private func printRecordStop(_ response: [String: Any]) {
+        if let path = response["path"] as? String {
+            print("[record] saved - \(path)")
+        } else {
+            print("[record] stopped")
+        }
+    }
+}
+
+enum VPhoneHostControlClient {
+    private enum ClientError: LocalizedError {
+        case socketUnavailable(String)
+        case invalidResponse
+        case commandFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case let .socketUnavailable(path):
+                "Host control socket is unavailable: \(path). Start the VM with `make boot` first."
+            case .invalidResponse:
+                "Host control returned an invalid response."
+            case let .commandFailed(message):
+                message
+            }
+        }
+    }
+
+    static func send(_ command: [String: Any], vmDirectory: URL) throws -> [String: Any] {
+        let socketPath = vmDirectory.standardizedFileURL.appendingPathComponent("vphone.sock").path
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw ClientError.socketUnavailable(socketPath)
+        }
+        defer { close(fd) }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = socketPath.utf8CString
+        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
+            throw ClientError.socketUnavailable(socketPath)
+        }
+        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dst in
+                for (index, byte) in pathBytes.enumerated() {
+                    dst[index] = byte
+                }
+            }
+        }
+
+        let connected = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard connected == 0 else {
+            throw ClientError.socketUnavailable(socketPath)
+        }
+
+        var data = try JSONSerialization.data(withJSONObject: command)
+        data.append(0x0A)
+        try data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+            var remaining = data.count
+            var offset = 0
+            while remaining > 0 {
+                let written = write(fd, baseAddress.advanced(by: offset), remaining)
+                if written <= 0 {
+                    throw ClientError.socketUnavailable(socketPath)
+                }
+                offset += written
+                remaining -= written
+            }
+        }
+
+        let responseData = readLine(fd: fd)
+        guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            throw ClientError.invalidResponse
+        }
+        if json["ok"] as? Bool == true {
+            return json
+        }
+        throw ClientError.commandFailed(json["error"] as? String ?? "host control command failed")
+    }
+
+    private static func readLine(fd: Int32) -> Data {
+        var data = Data()
+        var byte: UInt8 = 0
+        while read(fd, &byte, 1) == 1 {
+            if byte == 0x0A { break }
+            data.append(byte)
+        }
+        return data
+    }
 }
 
 struct PatchFirmwareCLI: ParsableCommand {
