@@ -39,6 +39,7 @@ class VPhoneScreenRecorder {
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var timer: Timer?
     private var frameCount: Int64 = 0
+    private var recordingStartTime: TimeInterval = 0
     private var outputURL: URL?
     private var graphicsDisplay: VZGraphicsDisplay?
     private var captureModeDescription = "private VZGraphicsDisplay screenshots"
@@ -101,15 +102,18 @@ class VPhoneScreenRecorder {
         graphicsDisplay = source.graphicsDisplay
         captureModeDescription = source.description
         frameCount = 0
+        recordingStartTime = ProcessInfo.processInfo.systemUptime
         screenshotInFlight = false
         didLogCaptureFailure = false
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) {
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) {
             [weak self] _ in
             Task { @MainActor in
                 self?.captureFrame()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
 
         print(
             "[record] started - \(url.lastPathComponent) (\(width)x\(height), source: \(captureModeDescription))"
@@ -134,6 +138,7 @@ class VPhoneScreenRecorder {
         graphicsDisplay = nil
         screenshotInFlight = false
         didLogCaptureFailure = false
+        recordingStartTime = 0
 
         if let url {
             print("[record] saved - \(url.path)")
@@ -260,7 +265,8 @@ class VPhoneScreenRecorder {
         }
         CVPixelBufferUnlockBaseAddress(pb, [])
 
-        let time = CMTime(value: frameCount, timescale: 30)
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - recordingStartTime)
+        let time = CMTime(seconds: elapsed, preferredTimescale: 600)
         adaptor.append(pb, withPresentationTime: time)
         frameCount += 1
     }

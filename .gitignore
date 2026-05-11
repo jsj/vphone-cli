@@ -34,6 +34,7 @@ xcuserdata/
 
 ## Obj-C/Swift specific
 *.hmap
+*.dylib
 
 ## App packaging
 *.ipa

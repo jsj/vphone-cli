@@ -9,18 +9,27 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     private var currentTouchSwipeAim: Int = 0
     private var isDragHighlightVisible = false
+    private var cachedMultiTouchDevice: AnyObject?
+    private var injectionWorkItems: [DispatchWorkItem] = []
+    private var isSyntheticTouchActive = false
+    private var lastSyntheticWindowPoint: NSPoint?
 
     // MARK: - Private API Accessors
 
     /// https://github.com/wh1te4ever/super-tart-vphone-writeup/blob/main/contents/ScreenSharingVNC.swift
     private var multiTouchDevice: AnyObject? {
+        if let cachedMultiTouchDevice {
+            return cachedMultiTouchDevice
+        }
         guard let vm = virtualMachine else { return nil }
         guard let devices = Dynamic(vm)._multiTouchDevices.asObject as? NSArray,
               devices.count > 0
         else {
             return nil
         }
-        return devices.object(at: 0) as AnyObject
+        let device = devices.object(at: 0) as AnyObject
+        cachedMultiTouchDevice = device
+        return device
     }
 
     var recordingGraphicsDisplay: VZGraphicsDisplay? {
@@ -42,6 +51,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        cachedMultiTouchDevice = nil
         // Ensure keyboard events route to VM view right after window attach.
         window?.makeFirstResponder(self)
         registerForDraggedTypes([.fileURL])
@@ -193,17 +203,22 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
     /// Inject a tap at pixel coordinates (matching screenshot image dimensions).
     func injectTap(pixelX: Double, pixelY: Double, screenWidth: Int, screenHeight: Int) {
+        cancelPendingInjectionEvents()
         let localPoint = pixelToLocal(pixelX: pixelX, pixelY: pixelY, screenWidth: screenWidth, screenHeight: screenHeight)
         let windowPoint = convert(localPoint, to: nil)
 
         if let downEvent = synthesizeMouseEvent(type: .leftMouseDown, at: windowPoint) {
             mouseDown(with: downEvent)
+            isSyntheticTouchActive = true
+            lastSyntheticWindowPoint = windowPoint
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+        scheduleInjectionEvent(after: 0.08) { [weak self] in
             guard let self else { return }
             if let upEvent = self.synthesizeMouseEvent(type: .leftMouseUp, at: windowPoint) {
                 self.mouseUp(with: upEvent)
             }
+            self.isSyntheticTouchActive = false
+            self.lastSyntheticWindowPoint = nil
         }
     }
 
@@ -212,6 +227,7 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
         fromX: Double, fromY: Double, toX: Double, toY: Double,
         screenWidth: Int, screenHeight: Int, durationMs: Int = 300
     ) {
+        cancelPendingInjectionEvents()
         let startLocal = pixelToLocal(pixelX: fromX, pixelY: fromY, screenWidth: screenWidth, screenHeight: screenHeight)
         let endLocal = pixelToLocal(pixelX: toX, pixelY: toY, screenWidth: screenWidth, screenHeight: screenHeight)
         let startWindow = convert(startLocal, to: nil)
@@ -222,6 +238,8 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
 
         if let downEvent = synthesizeMouseEvent(type: .leftMouseDown, at: startWindow) {
             mouseDown(with: downEvent)
+            isSyntheticTouchActive = true
+            lastSyntheticWindowPoint = startWindow
         }
 
         for i in 1...steps {
@@ -232,21 +250,41 @@ class VPhoneVirtualMachineView: VZVirtualMachineView {
             let delay = stepInterval * Double(i)
 
             if i < steps {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                scheduleInjectionEvent(after: delay) { [weak self] in
                     guard let self else { return }
+                    self.lastSyntheticWindowPoint = pt
                     if let dragEvent = self.synthesizeMouseEvent(type: .leftMouseDragged, at: pt) {
                         self.mouseDragged(with: dragEvent)
                     }
                 }
             } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                scheduleInjectionEvent(after: delay) { [weak self] in
                     guard let self else { return }
                     if let upEvent = self.synthesizeMouseEvent(type: .leftMouseUp, at: pt) {
                         self.mouseUp(with: upEvent)
                     }
+                    self.isSyntheticTouchActive = false
+                    self.lastSyntheticWindowPoint = nil
                 }
             }
         }
+    }
+
+    private func cancelPendingInjectionEvents() {
+        injectionWorkItems.forEach { $0.cancel() }
+        injectionWorkItems.removeAll()
+        guard isSyntheticTouchActive, let lastSyntheticWindowPoint else { return }
+        if let upEvent = synthesizeMouseEvent(type: .leftMouseUp, at: lastSyntheticWindowPoint) {
+            mouseUp(with: upEvent)
+        }
+        isSyntheticTouchActive = false
+        self.lastSyntheticWindowPoint = nil
+    }
+
+    private func scheduleInjectionEvent(after delay: TimeInterval, _ body: @escaping () -> Void) {
+        let workItem = DispatchWorkItem(block: body)
+        injectionWorkItems.append(workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     // MARK: - Legacy Touch Injection (macOS 15)

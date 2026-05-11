@@ -22,6 +22,7 @@
 
 #import "vphoned_accessibility.h"
 #import "vphoned_apps.h"
+#import "vphoned_auth_broker.h"
 #import "vphoned_clipboard.h"
 #import "vphoned_devmode.h"
 #import "vphoned_files.h"
@@ -278,6 +279,7 @@ static BOOL handle_client(int fd) {
     // Build capabilities list
     NSMutableArray *caps = [NSMutableArray
         arrayWithObjects:@"hid", @"devmode", @"file", @"keychain", nil];
+    [caps addObject:@"auth_broker"];
     if (vp_location_available())
       [caps addObject:@"location"];
     if (vp_custom_installer_available())
@@ -369,6 +371,14 @@ static BOOL handle_client(int fd) {
           continue;
         }
 
+        // Guest-to-host Apple auth capability broker
+        if ([t isEqualToString:@"auth_broker_request"]) {
+          NSDictionary *resp = vp_handle_auth_broker_command(msg);
+          if (resp && !vp_write_message(fd, resp))
+            break;
+          continue;
+        }
+
         // Settings operations
         if ([t hasPrefix:@"settings_"]) {
           NSDictionary *resp = vp_handle_settings_command(msg);
@@ -431,6 +441,7 @@ int main(int argc, char *argv[]) {
     if (!vp_devmode_load())
       NSLog(@"vphoned: XPC unavailable, devmode disabled");
     vp_location_load();
+    vp_auth_broker_start_local_relay();
 
     gClipboardAvailable = vp_clipboard_load();
     gAppsAvailable = vp_apps_load();

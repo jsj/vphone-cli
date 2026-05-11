@@ -13,6 +13,7 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
     private var appWindowController: VPhoneAppWindowController?
     private var locationProvider: VPhoneLocationProvider?
     private var hostControl: VPhoneHostControl?
+    private var authBroker: VPhoneAuthBroker?
     private var sigintSource: DispatchSourceSignal?
     private var didAttemptAutoInstall = false
 
@@ -89,6 +90,9 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
             locationProvider = provider
 
             if let device = vm.virtualMachine.socketDevices.first as? VZVirtioSocketDevice {
+                let broker = VPhoneAuthBroker()
+                broker.start(device: device)
+                authBroker = broker
                 control.connect(device: device)
             }
         }
@@ -244,6 +248,9 @@ class VPhoneAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        if let device = vm?.virtualMachine.socketDevices.first as? VZVirtioSocketDevice {
+            authBroker?.stop(device: device)
+        }
         hostControl?.stop()
     }
 

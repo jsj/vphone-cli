@@ -44,7 +44,7 @@ static NSString *TLExecutablePath(void) {
     return argv0 ?: @"";
 }
 
-static BOOL TLShouldRunInCurrentProcess(void) {
+static BOOL TLShouldScanInCurrentProcess(void) {
     NSString *execPath = TLExecutablePath();
     if (!execPath.length) return NO;
 
@@ -52,9 +52,10 @@ static BOOL TLShouldRunInCurrentProcess(void) {
     // like xpcproxy, logd, notifyd, sshd, shells, and helper tools. Restrict the
     // user tweak loader to app binaries only so it does not destabilize boot or
     // process launch paths.
-    if ([execPath containsString:@".app/"]) return YES;
-
-    return NO;
+    // like xpcproxy, logd, notifyd, sshd, shells, and helper tools. Apps remain
+    // opt-out by filter, while non-app daemons must be named explicitly in a
+    // tweak plist Filter.Executables list.
+    return [execPath containsString:@".app/"] || TLExecutableName().length > 0;
 }
 
 static BOOL TLArrayContainsString(id obj, NSString *value) {
@@ -91,13 +92,19 @@ static BOOL TLFilterMatches(NSDictionary *plist, NSString *bundleID, NSString *e
     return YES;
 }
 
+static BOOL TLHasExplicitExecutableFilter(NSDictionary *plist, NSString *executableName) {
+    NSDictionary *filter = [plist isKindOfClass:[NSDictionary class]] ? plist[@"Filter"] : nil;
+    id executables = [filter isKindOfClass:[NSDictionary class]] ? filter[@"Executables"] : nil;
+    return TLArrayContainsString(executables, executableName);
+}
+
 static void TLLoadTweaks(void) {
     NSFileManager *fm = NSFileManager.defaultManager;
     NSString *execPath = TLExecutablePath();
     NSString *bundleID = NSBundle.mainBundle.bundleIdentifier ?: @"";
     NSString *executableName = TLExecutableName();
 
-    if (!TLShouldRunInCurrentProcess()) {
+    if (!TLShouldScanInCurrentProcess()) {
         return;
     }
 
@@ -118,6 +125,11 @@ static void TLLoadTweaks(void) {
         NSDictionary *plist = [NSDictionary dictionaryWithContentsOfFile:plistPath];
         if (![plist isKindOfClass:[NSDictionary class]]) {
             TLLog(@"Skipping unreadable plist %@", plistPath);
+            continue;
+        }
+
+        if (![execPath containsString:@".app/"] &&
+            !TLHasExplicitExecutableFilter(plist, executableName)) {
             continue;
         }
 

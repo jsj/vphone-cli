@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Filter</key>
+	<dict>
+		<key>Executables</key>
+		<array>
+			<string>Stocks</string>
+			<string>AppStore</string>
+			<string>Preferences</string>
+			<string>storekitd</string>
+			<string>itunesstored</string>
+			<string>appstored</string>
+			<string>akd</string>
+			<string>accountsd</string>
+			<string>amsaccountsd</string>
+			<string>appleaccountd</string>
+		</array>
+	</dict>
+</dict>
+</plist>

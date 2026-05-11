@@ -288,10 +288,6 @@ class VPhoneControl {
             print("[control] send failed (not connected)")
             return
         }
-        let suffix = down.map { $0 ? " down" : " up" } ?? ""
-        print(
-            "[control] hid page=0x\(String(page, radix: 16)) usage=0x\(String(usage, radix: 16))\(suffix)"
-        )
     }
 
     // MARK: - Developer Mode
@@ -665,6 +661,17 @@ class VPhoneControl {
         }
     }
 
+    // MARK: - Auth Broker
+
+    func authBrokerRequest(kind: String, payload: [String: Any] = [:]) async throws -> [String: Any] {
+        let (resp, _) = try await sendRequest([
+            "t": "auth_broker_request",
+            "kind": kind,
+            "payload": payload,
+        ])
+        return resp
+    }
+
     // MARK: - Accessibility
 
     func accessibilityTree(depth: Int = -1) async throws -> [String: Any] {
@@ -700,7 +707,6 @@ class VPhoneControl {
             print("[control] sendLocation failed (not connected)")
             return
         }
-        print("[control] location lat=\(latitude) lon=\(longitude)")
     }
 
     func sendLocationStop() {
@@ -892,7 +898,7 @@ class VPhoneControl {
         case "file_get", "file_put", "ipa_install":
             transferRequestTimeout
         case "devmode", "file_list", "file_delete", "file_rename", "file_mkdir", "keychain_list",
-             "app_list", "app_launch", "open_url", "accessibility_tree":
+             "app_list", "app_launch", "open_url", "accessibility_tree", "auth_broker_request":
             slowRequestTimeout
         default:
             defaultRequestTimeout
@@ -919,11 +925,11 @@ class VPhoneControl {
         let length = UInt32(json.count)
         var header = length.bigEndian
         let headerOK = withUnsafeBytes(of: &header) { buf in
-            Darwin.write(fd, buf.baseAddress!, 4) == 4
+            Self.writeFully(fd: fd, buf: buf.baseAddress!, count: 4)
         }
         guard headerOK else { return false }
         return json.withUnsafeBytes { buf in
-            Darwin.write(fd, buf.baseAddress!, json.count) == json.count
+            Self.writeFully(fd: fd, buf: buf.baseAddress!, count: json.count)
         }
     }
 

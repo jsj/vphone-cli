@@ -21,6 +21,8 @@ import ImageIO
 ///   {"t":"swipe","x1":645,"y1":2600,"x2":645,"y2":1400,"ms":300}  → swipe
 ///   {"t":"key","name":"home"}                   → hardware key (home/power/volup/voldown)
 ///   {"t":"type","text":"Hello"}                 → set guest clipboard
+///   {"t":"guest_mkdir","path":"/tmp/x"}         → create directory through vphoned
+///   {"t":"guest_upload_base64","path":"/tmp/x","data":"...","permissions":"755"} → upload file
 ///
 /// All commands except "screenshot" wait briefly then capture a compact screen
 /// image returned as `"image":"<base64>"` in the response.  Pass `"screen":false`
@@ -465,6 +467,60 @@ class VPhoneHostControl {
 
             semaphore.wait()
             writeResponse(fd, ok: result.ok, error: result.error, image: result.imageBase64)
+
+        case "guest_mkdir":
+            guard let path = json["path"] as? String else {
+                writeResponse(fd, ok: false, error: "guest_mkdir requires path")
+                return
+            }
+            let semaphore = DispatchSemaphore(value: 0)
+            let result = ResultBox()
+
+            Task { @MainActor in
+                defer { semaphore.signal() }
+                guard let controller, let ctl = controller.control, ctl.isConnected else {
+                    result.error = "guest not connected"
+                    return
+                }
+                do {
+                    try await ctl.createDirectory(path: path)
+                    result.ok = true
+                } catch {
+                    result.error = "\(error)"
+                }
+            }
+
+            semaphore.wait()
+            writeResponse(fd, ok: result.ok, error: result.error)
+
+        case "guest_upload_base64":
+            guard let path = json["path"] as? String,
+                  let encoded = json["data"] as? String,
+                  let data = Data(base64Encoded: encoded)
+            else {
+                writeResponse(fd, ok: false, error: "guest_upload_base64 requires path and base64 data")
+                return
+            }
+            let permissions = json["permissions"] as? String ?? "644"
+            let semaphore = DispatchSemaphore(value: 0)
+            let result = ResultBox()
+
+            Task { @MainActor in
+                defer { semaphore.signal() }
+                guard let controller, let ctl = controller.control, ctl.isConnected else {
+                    result.error = "guest not connected"
+                    return
+                }
+                do {
+                    try await ctl.uploadFile(path: path, data: data, permissions: permissions)
+                    result.ok = true
+                } catch {
+                    result.error = "\(error)"
+                }
+            }
+
+            semaphore.wait()
+            writeResponse(fd, ok: result.ok, error: result.error)
 
         default:
             writeResponse(fd, ok: false, error: "unknown command: \(type)")
