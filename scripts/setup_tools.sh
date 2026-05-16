@@ -36,7 +36,7 @@ refresh_all_submodules
 
 echo "[2/6] Checking brew packages..."
 
-BREW_PACKAGES=(aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone libusb ipsw git-lfs python@3.13)
+BREW_PACKAGES=(aria2 wget gnu-tar openssl@3 ldid-procursus sshpass keystone libusb ipsw git-lfs python@3.13 zstd)
 BREW_MISSING=()
 
 for pkg in "${BREW_PACKAGES[@]}"; do

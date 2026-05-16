@@ -46,7 +46,7 @@ help:
 	@echo "  make setup_machine                   Full setup through First Boot"
 	@echo "    Options: JB=1                      Jailbreak firmware/CFW path"
 	@echo "             DEV=1                     Dev firmware/CFW path (dev TXM + cfw_install_dev)"
-	@echo "             LESS=1                    Build, keeping iOS security mitigations enabled. 
+	@echo "             LESS=1                    Build, keeping iOS security mitigations enabled."
 	@echo "             SKIP_PROJECT_SETUP=1      Skip setup_tools/build"
 	@echo "             NONE_INTERACTIVE=1        Auto-continue prompts + boot analysis"
 	@echo "             SUDO_PASSWORD=...         Preload sudo credential for setup flow"
@@ -59,7 +59,9 @@ help:
 	@echo "Build:"
 	@echo "  make build                   Build + sign vphone-cli"
 	@echo "  make vphoned                 Cross-compile + sign vphoned for iOS"
-	@echo "  make clean                   Remove all build artifacts (keeps IPSWs)"
+	@echo "  make clean                   Remove build/tooling artifacts only"
+	@echo "    Options: CLEAN_VM=1        Also remove VM_DIR=$(VM_DIR) after confirmation"
+	@echo "             CLEAN_IPSW=1      Also remove ipsws/ after confirmation"
 	@echo ""
 	@echo "VM management:"
 	@echo "  make vm_new                  Create VM directory with manifest (config.plist)"
@@ -98,6 +100,7 @@ help:
 	@echo "Restore:"
 	@echo "  make restore_get_shsh        Dump SHSH response from Apple"
 	@echo "  make restore                 Restore to device (pymobiledevice3 backend)"
+	@echo "  make restore_offline         Restore offline — decrypts AEA images in place, uses cached .shsh blob"
 	@echo ""
 	@echo "Ramdisk:"
 	@echo "  make ramdisk_build           Build signed SSH ramdisk"
@@ -139,13 +142,32 @@ setup_tools:
 	VARIANT=$(VARIANT) zsh $(SCRIPTS)/setup_tools.sh
 
 # ═══════════════════════════════════════════════════════════════════
-# Clean — remove all untracked/ignored files (preserves IPSWs only)
+# Clean — remove generated build/tooling files by default.
+# Destructive VM/IPSW cleanup is opt-in and requires confirmation.
 # ═══════════════════════════════════════════════════════════════════
 
 .PHONY: clean
 clean:
-	@echo "=== Cleaning all untracked files (preserving IPSWs) ==="
-	git clean -fdx -e '*.ipsw' -e '*_Restore*'
+	@set -e; \
+	echo "=== Cleaning build/tooling artifacts ==="; \
+	echo "Removing: .build .swiftpm .vphoned.signed $(VENV) $(TOOLS_PREFIX)"; \
+	if [ "$(CLEAN_VM)" = "1" ] || [ "$(CLEAN_IPSW)" = "1" ]; then \
+		echo ""; \
+		echo "WARNING: destructive clean requested."; \
+		[ "$(CLEAN_VM)" = "1" ] && echo "  VM directory: $(VM_DIR)/"; \
+		[ "$(CLEAN_IPSW)" = "1" ] && echo "  IPSW cache:   ipsws/"; \
+		printf "Also remove destructive targets above? [y/N] "; \
+		read answer; \
+		case "$$answer" in y|Y|yes|YES) ;; *) \
+			echo "[-] Destructive clean cancelled; no files removed."; \
+			exit 0; \
+		esac; \
+	fi; \
+	rm -rf .build .swiftpm .vphoned.signed "$(VENV)" "$(TOOLS_PREFIX)"; \
+	if [ "$(CLEAN_VM)" = "1" ] || [ "$(CLEAN_IPSW)" = "1" ]; then \
+		if [ "$(CLEAN_VM)" = "1" ]; then rm -rf "$(VM_DIR)"; fi; \
+		if [ "$(CLEAN_IPSW)" = "1" ]; then rm -rf ipsws; fi; \
+	fi
 
 # ═══════════════════════════════════════════════════════════════════
 # Build
@@ -324,19 +346,71 @@ fw_patch_jb: patcher_build
 # Restore
 # ═══════════════════════════════════════════════════════════════════
 
-.PHONY: restore_get_shsh restore
+.PHONY: restore_get_shsh restore restore_offline
+
+# Resolve ECID from RESTORE_ECID or vm/udid-prediction.txt (written by boot_dfu).
+define _resolve_ecid
+	if [ -n "$(RESTORE_ECID)" ]; then \
+		ECID="$(RESTORE_ECID)"; \
+	elif [ -f "$(CURDIR)/$(VM_DIR)/udid-prediction.txt" ]; then \
+		ECID=$$(grep '^ECID=' "$(CURDIR)/$(VM_DIR)/udid-prediction.txt" | head -1 | cut -d= -f2); \
+	fi; \
+	if [ -z "$$ECID" ]; then \
+		echo "[-] Cannot resolve ECID — set RESTORE_ECID or run 'make boot_dfu' first"; \
+		exit 1; \
+	fi
+endef
 
 restore_get_shsh:
-	cd $(VM_DIR) && "$(PYTHON)" "$(PMD3_BRIDGE)" restore-get-shsh \
+	@$(call _resolve_ecid); \
+	cd "$(VM_DIR)" && "$(PYTHON)" "$(PMD3_BRIDGE)" restore-get-shsh \
 		--vm-dir . \
 		$(if $(RESTORE_UDID),--udid $(RESTORE_UDID),) \
-		$(if $(RESTORE_ECID),--ecid $(RESTORE_ECID),)
+		--ecid "$$ECID"
 
 restore:
-	cd $(VM_DIR) && "$(PYTHON)" "$(PMD3_BRIDGE)" restore-update \
+	@$(call _resolve_ecid); \
+	cd "$(VM_DIR)" && "$(PYTHON)" "$(PMD3_BRIDGE)" restore-update \
 		--vm-dir . \
 		$(if $(RESTORE_UDID),--udid $(RESTORE_UDID),) \
-		$(if $(RESTORE_ECID),--ecid $(RESTORE_ECID),)
+		--ecid "$$ECID"
+
+restore_offline:
+	@$(call _resolve_ecid); \
+	SHSH=$$(ls "$(CURDIR)/$(VM_DIR)/"*.shsh 2>/dev/null | head -1); \
+	if [ -z "$$SHSH" ]; then \
+		echo "[-] No .shsh file in $(VM_DIR)/ — run 'make restore_get_shsh' first"; \
+		exit 1; \
+	fi; \
+	RESTORE_SRC=$$(echo "$(CURDIR)/$(VM_DIR)/iPhone"*_Restore); \
+	if [ ! -d "$$RESTORE_SRC" ]; then \
+		echo "[-] No iPhone*_Restore directory in $(VM_DIR)/"; \
+		exit 1; \
+	fi; \
+	echo "[+] Decrypting AEA images in place..."; \
+	for aea in "$$RESTORE_SRC"/*.dmg.aea; do \
+		[ -f "$$aea" ] || continue; \
+		[ "$$(xxd -l 4 -p "$$aea")" = "41454131" ] || continue; \
+		base=$$(basename "$$aea"); \
+		if ! ipsw fw aea -o "$$RESTORE_SRC" "$$aea"; then \
+			echo "[-] ipsw fw aea failed for $$base — aborting"; \
+			exit 1; \
+		fi; \
+		if ! mv -f "$$RESTORE_SRC/$${base%.aea}" "$$aea"; then \
+			echo "[-] mv failed for $$base — aborting (decrypted file missing?)"; \
+			exit 1; \
+		fi; \
+		if [ "$$(xxd -l 4 -p "$$aea")" = "41454131" ]; then \
+			echo "[-] $$base still AEA1-encrypted after decrypt — aborting"; \
+			exit 1; \
+		fi; \
+	done; \
+	echo "[+] Restoring offline with SHSH: $$(basename $$SHSH)"; \
+	cd "$(VM_DIR)" && "$(PYTHON)" "$(PMD3_BRIDGE)" restore-update \
+		--vm-dir . \
+		--tss "$$SHSH" \
+		$(if $(RESTORE_UDID),--udid $(RESTORE_UDID),) \
+		--ecid "$$ECID"
 
 # ═══════════════════════════════════════════════════════════════════
 # Ramdisk
