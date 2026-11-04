@@ -668,6 +668,32 @@ struct FirmwareGuestPatchResolutionTests {
     }
 
     @Test
+    func `TV GLES transport is opt in and only admitted for arm64e`() throws {
+        let transport = FirmwareGuestSystemPatchSet.paravirtGPUPrimitiveRestart
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [transport], arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [transport]) == [transport])
+        #expect(FirmwareGuestPatchResolution.unvalidatedHomePodGuestPatches(enabled: [transport]) == [transport])
+        let plan = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.tvOS4KPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("26.6"), cloudOS: VPhoneVersion("26.4")
+        )
+        #expect(!plan.isEnabled(transport))
+        #expect(!plan.isEnabled(FirmwarePatchSetCatalog.paravirtGLESPatch))
+        let orientation = FirmwareGuestSystemPatchSet.glesUpperLeft
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [orientation], arm64eUserland: true).isEmpty)
+        #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: [orientation]) == [orientation])
+        #expect(!plan.isEnabled(orientation))
+        let otaPlan = try VPhonePatchPlan.resolve(
+            preset: FirmwarePatchSetCatalog.tvOS4KPreset,
+            patchSets: FirmwarePatchSetCatalog.bundled,
+            iOSBase: VPhoneVersion("27.2"), cloudOS: VPhoneVersion("26.4"),
+            allowed: [orientation]
+        )
+        #expect(otaPlan.isEnabled(orientation))
+    }
+
+    @Test
     func `only an arm64e TV admits the environment hooks and the launchd patch that loads them`() {
         let hooks: Set = ["system-launchdaemons-boot-environment", "system-launchd-boot-jetsam_panic_guard_bypass"]
         #expect(FirmwareGuestPatchResolution.unvalidatedTVGuestPatches(enabled: hooks, arm64eUserland: true).isEmpty)

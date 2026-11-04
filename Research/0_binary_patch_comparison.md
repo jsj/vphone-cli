@@ -7302,3 +7302,55 @@ the patch off restored all 82 cache files and the undo log byte for byte,
 removed the added files, folders and journal, and brought back the original
 failure; turning it on again reproduced the same cache bytes. Other builds
 have not been tested and may need different matching.
+
+### Opt-in Apple TV GLES investigation (2026-11-04)
+
+YouTube TV tvOS 1.23.00 on AppleTV18,1 / tvOS 27.2 (24K120), cloudOS
+26.4 (23E5207q), returns nil from EAGL API 3 and 2 before rendering. A Frida
+Gadget trace links the abort to SBDEglAdapter adding the nil context to its
+set. PR #798 supplies the existing three-part iOS repair.
+
+For a separate clone only, retain the shipped TV presets and explicitly allow
+`kernel-cfw-paravirt_gles_renderer` and
+`system-paravirt_gpu-cfw-primitive_restart`. The guest driver patch uses its
+existing cloudOS 26.4 gate and semantic discovery. Admit that existing transport
+repair for arm64e TV only; plain-arm64 TV and HomePod remain excluded. When the
+GLES kernel patch is selected, environment updates also refresh the compiler
+plugin, retargeted and signed for tvOS using the existing TV library staging
+path. Ordinary TV updates and iOS staging retain their existing selection.
+
+The acquired app's actual guide still requires account access. A built bundle
+or non-nil EAGLContext alone does not establish rendering. No shipped preset is
+widened by this experiment.
+
+Measured on the clone: EAGL APIs 1–3 create contexts, ES 2 shader readback is
+exactly RGBA (0,255,0,255) with GL error zero, and the uninstrumented acquired
+YouTube TV shell renders its welcome screen. It is vertically inverted, matching
+the upstream PV IOSurface yInvert gap. Admit the existing opt-in
+`system-systemhook-cfw-gles_upper_left` marker for arm64e TV; its existing
+`AGX_GL_VIEWPORT_INVERT_CONFIG=UPPER_LEFT` environment path is carried by the
+already supported TV environment hooks. The shipped presets remain unchanged.
+The compiler refresh uses the applied kernel receipt, not the original restore
+plan: installed guests keep their old plan after `cfw update-kernel`.
+The orientation marker's version gate also admits the exact 27.2 userland
+recorded in the TV OTA plan, alongside the upstream 26.6 pairing; cloudOS stays
+26.4. Regression coverage resolves the explicitly allowed marker for that
+27.2/26.4 plan, rather than only testing membership in the TV admission list.
+
+Final runtime verification: the uninstrumented acquired app renders upright in
+`tv27-gles`, frontmost PID 245. The same native probe again creates EAGL APIs
+1–3 and reads exactly (0,255,0,255), GL error zero. Actual app screenshot:
+Kahlo `artifacts/youtube-tvos-guide/20261104/tvos-gles-fix/app-upright-loaded.png`.
+The signed-out welcome screen requires member sign-in; no guide or playback
+claim follows from this capture. Full bundle validation, 74 selected host tests
+and `make -C VPhoneGuestComponents test-gles-air` pass. Original `tv27` remains
+stopped and unchanged; the unrelated iOS VM remains running.
+
+### November 11, 2026 upstream rebase
+
+Rebased the local arm64e TV GLES opt-in onto upstream 2.16.1 (`d1c36fa8`).
+Retain upstream's unrestricted iOS userland gate for the orientation marker;
+its cloudOS 26.4 gate still applies. Keep the local arm64e TV admission and
+TV compiler-plugin platform conversion. Shipped TV presets still leave these
+patches off. Earlier runtime evidence above predates this rebase; host build
+and regression checks do not establish a new guest runtime validation.

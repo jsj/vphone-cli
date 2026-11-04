@@ -141,6 +141,10 @@ public enum FirmwareGuestPatchResolution {
     /// arm64e, so a plain-arm64 launchd could not load them.
     public static let tvArm64eGuestPatches: Set<String> = Set([
         "system-extensions-boot-gpu_bundle",
+        // Opt-in GLES transport repair for the same cloudOS 26.4 driver.
+        // The TV presets continue to block it until guest rendering is verified.
+        FirmwareGuestSystemPatchSet.paravirtGPUPrimitiveRestart,
+        FirmwareGuestSystemPatchSet.glesUpperLeft,
         FirmwareGuestSystemPatchSet.tvOTAUserland,
         FirmwareGuestSystemPatchSet.tvSetupDisplayLookup,
         FirmwareGuestSystemPatchSet.tvSetupFocus,

@@ -2319,7 +2319,8 @@ struct VPhoneCustomFirmwareInstaller {
                     gpuBundleReinstalled = true
                 } else {
                     print("  [·] system-extensions-boot-gpu_bundle: no restore tree; GPU bundle left as installed")
-                    if !guestDevice.usesTVOS, try refreshGPUCompilerPlugin(system: system) {
+                    if (!guestDevice.usesTVOS || kernelPatches?.contains(FirmwarePatchSetCatalog.paravirtGLESPatch) == true),
+                       try refreshGPUCompilerPlugin(system: system, work: work, tvOS: guestDevice.usesTVOS) {
                         print("  [+] system-extensions-boot-gpu_bundle: compiler plugin updated from this bundle")
                     }
                 }
@@ -3424,10 +3425,11 @@ struct VPhoneCustomFirmwareInstaller {
 
     /// Replace an installed guest's compiler plugin with this bundle's when
     /// they differ, and seal the GPU bundle again. True when it was replaced.
-    private func refreshGPUCompilerPlugin(system: VPhoneConfinedDirectory) throws -> Bool {
+    private func refreshGPUCompilerPlugin(system: VPhoneConfinedDirectory, work: WorkDirectory, tvOS: Bool) throws -> Bool {
         let gpu = "System/Library/Extensions/\(VPhonePCCGPUDriver.name)"
         let plugin = "\(gpu)/libAppleParavirtCompilerPluginIOGPUFamily.dylib"
-        let source = resources.gpuCompilerPlugin
+        // Match the platform of MTLCompilerService, as the TV GPU driver does.
+        let source = tvOS ? try tvOSCopy(of: resources.gpuCompilerPlugin, work: work) : resources.gpuCompilerPlugin
         guard try system.isRegularFile(plugin),
               FileManager.default.fileExists(atPath: source.path),
               try system.readData(plugin) != Data(contentsOf: source)
