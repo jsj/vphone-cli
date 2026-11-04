@@ -600,7 +600,7 @@ public enum FirmwareGuestSystemPatchSet {
                 """,
                 target: .guestFile(path: glesUpperLeftMarker),
                 applicability: VPhonePatchApplicability(
-                    iOSBase: .release(major: 26, minor: 6),
+                    iOSBase: .oneOf([.release(major: 26, minor: 6), .release(major: 27, minor: 2)]),
                     cloudOS: .release(major: 26, minor: 4),
                 ),
             ),
