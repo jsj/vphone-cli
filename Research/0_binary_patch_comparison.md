@@ -7354,3 +7354,17 @@ its cloudOS 26.4 gate still applies. Keep the local arm64e TV admission and
 TV compiler-plugin platform conversion. Shipped TV presets still leave these
 patches off. Earlier runtime evidence above predates this rebase; host build
 and regression checks do not establish a new guest runtime validation.
+
+Rebase validation on November 11: the complete `VPhone` Debug bundle build
+passed admission and `codesign --verify --deep --strict`. The two selected
+FirmwareGuestPatchResolution and bundled-catalogue suites passed all 78 tests.
+`make -C VPhoneGuestComponents test-gles-air` passed, including the 112
+clip/w/range depth-rendering cases. The initial build resolved obsolete local
+modules from the pre-rebase XcodeCommand products directory; moving those stale
+generated modules and libraries aside allowed the current XcodeKit products to
+resolve correctly. No source workaround was needed.
+
+The validated bundle is staged in `.build/XcodeBundle/Build/Products/Debug/`.
+The installed Launchpad control endpoint did not return status within a bounded
+probe. No app restart, VM stop, guest-environment update or bundle reassignment
+was performed; the running iOS guest remains on its previously installed bundle.
