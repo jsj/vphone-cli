@@ -658,6 +658,13 @@ class VPhoneControl {
         )
     }
 
+    func unlockDevice() async throws {
+        let (response, _) = try await sendRequest(["t": "unlock"])
+        guard response["ok"] as? Bool == true else {
+            throw ControlError.guestError(response["msg"] as? String ?? "failed to unlock device")
+        }
+    }
+
     // MARK: - URL
 
     func openURL(_ url: String) async throws {

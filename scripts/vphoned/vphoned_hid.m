@@ -38,6 +38,7 @@ static dispatch_queue_t gHIDQueue;
 #define VP_FIELD_IS_DISPLAY_INTEGRATED ((((uint32_t)11) << 16) | 25)
 
 BOOL vp_hid_load(void) {
+    if (gClient) return YES;
     void *h = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
     if (!h) { NSLog(@"vphoned: dlopen IOKit failed"); return NO; }
 

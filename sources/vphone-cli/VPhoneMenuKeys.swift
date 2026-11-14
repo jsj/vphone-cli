@@ -7,6 +7,7 @@ extension VPhoneMenuController {
     func buildKeysMenu() -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "Keys")
+        menu.addItem(makeItem("Unlock", action: #selector(unlockDevice)))
         menu.addItem(makeItem("Home Screen", action: #selector(sendHome)))
         menu.addItem(makeItem("Power", action: #selector(sendPower)))
         menu.addItem(makeItem("Volume Up", action: #selector(sendVolumeUp)))
@@ -28,6 +29,16 @@ extension VPhoneMenuController {
         menu.addItem(tidItem)
         item.submenu = menu
         return item
+    }
+
+    @objc func unlockDevice() {
+        Task {
+            do {
+                try await control.unlockDevice()
+            } catch {
+                showAlert(title: "Unlock Failed", message: error.localizedDescription, style: .warning)
+            }
+        }
     }
 
     @objc func sendHome() {

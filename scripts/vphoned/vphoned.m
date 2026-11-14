@@ -37,6 +37,7 @@
 #import "vphoned_protocol.h"
 #import "vphoned_settings.h"
 #import "vphoned_url.h"
+#import "vphoned_unlock.h"
 #import "vphoned_vcam.h"
 
 #ifndef AF_VSOCK
@@ -338,6 +339,7 @@ static BOOL handle_client(int fd) {
     if (gAppsAvailable)
       [caps addObject:@"apps"];
     [caps addObject:@"url"];
+    [caps addObject:@"unlock"];
     [caps addObject:@"settings"];
     [caps addObject:@"touch"];
 
@@ -416,6 +418,13 @@ static BOOL handle_client(int fd) {
         // App management operations
         if ([t hasPrefix:@"app_"]) {
           NSDictionary *resp = vp_handle_apps_command(msg);
+          if (resp && !vp_write_message(fd, resp))
+            break;
+          continue;
+        }
+
+        if ([t isEqualToString:@"unlock"]) {
+          NSDictionary *resp = vp_handle_unlock_command(msg);
           if (resp && !vp_write_message(fd, resp))
             break;
           continue;

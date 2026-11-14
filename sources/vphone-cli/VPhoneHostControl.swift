@@ -17,6 +17,7 @@ import ImageIO
 ///   {"t":"tap","x":645,"y":1398}                → tap at pixel coordinates
 ///   {"t":"swipe","x1":645,"y1":2600,"x2":645,"y2":1400,"ms":300}  → swipe
 ///   {"t":"key","name":"home"}                   → hardware key (home/power/volup/voldown)
+///   {"t":"unlock"}                              → unlock a passcode-free device
 ///   {"t":"type","text":"Hello"}                 → set guest clipboard
 ///
 /// All commands except "screenshot" wait briefly then capture a compact screen
@@ -374,6 +375,28 @@ class VPhoneHostControl {
                 }
             }
 
+            semaphore.wait()
+            writeResponse(fd, ok: result.ok, error: result.error, image: result.imageBase64)
+
+        case "unlock":
+            let semaphore = DispatchSemaphore(value: 0)
+            let result = ResultBox()
+            Task { @MainActor in
+                defer { semaphore.signal() }
+                guard let controller, let ctl = controller.control, ctl.isConnected else {
+                    result.error = "guest not connected"
+                    return
+                }
+                do {
+                    try await ctl.unlockDevice()
+                    result.ok = true
+                    if wantScreen {
+                        result.imageBase64 = await controller.captureCompactScreenshot()
+                    }
+                } catch {
+                    result.error = "\(error)"
+                }
+            }
             semaphore.wait()
             writeResponse(fd, ok: result.ok, error: result.error, image: result.imageBase64)
 
