@@ -190,10 +190,25 @@ id vcc_build_backing(void) {
     // picking _setActiveFormat: under standard presets.
     y420v_fmt[@"DefaultActiveFormat"] = @YES;
 
+    // Kino rejects 720p-only devices and leaves its preset list empty.
+    // Keep the existing defaults; expose 1080p for clients requiring Full HD.
+    NSMutableArray *formatDictionaries = [NSMutableArray arrayWithObjects:bgra_fmt, y420v_fmt, nil];
+    for (NSDictionary *base in @[bgra_fmt, y420v_fmt]) {
+      NSMutableDictionary *fullHD = [base mutableCopy];
+      fullHD[@"Name"] = [base[@"Name"] stringByReplacingOccurrencesOfString:@"720p" withString:@"1080p"];
+      fullHD[@"Width"] = @1920;
+      fullHD[@"Height"] = @1080;
+      fullHD[@"IntrinsicMatrixReferenceWidth"] = @1920;
+      fullHD[@"IntrinsicMatrixReferenceHeight"] = @1080;
+      fullHD[@"DefaultActiveFormat"] = @NO;
+      fullHD[@"AVCaptureSessionPresets"] = @[@"AVCaptureSessionPresetHigh", @"AVCaptureSessionPreset1920x1080"];
+      [formatDictionaries addObject:fullHD];
+    }
+
     SEL fmtInitSel = NSSelectorFromString(
         @"initWithFigCaptureStreamFormatDictionary:");
     NSMutableArray *formatObjs = [NSMutableArray array];
-    for (NSDictionary *fmtDict in @[ bgra_fmt, y420v_fmt ]) {
+    for (NSDictionary *fmtDict in formatDictionaries) {
       id fmtAlloc = ((id (*)(Class, SEL))objc_msgSend)(fmtClass,
                                                          @selector(alloc));
       id fmtObj = nil;

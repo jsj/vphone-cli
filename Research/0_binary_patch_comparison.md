@@ -4318,3 +4318,11 @@ stderr/stdin streams, legacy fixed-address NAT reporting, patch catalog and reci
 consistency, plus full bundle/Launchpad builds. Firmware fixture tests still
 require the separately held reference IPSWs; a build or synthetic test is not a
 claim that every newly supported OS has been restored and booted on this host.
+
+
+### Kino 1.4.3: additional virtual camera formats (2026-10-29)
+
+Source-only camera capability change in VCamSourceBacking.m adds 1920x1080 BGRA/420v alongside the unchanged 720p defaults. No firmware instruction patch was added. Kino previously trapped at image offset 0x1f6dd8 on an empty Camera._availablePresets array. The rebuilt libvcamcaptured installed in running ios27.0.1 allowed foreground launch and Rea/Frida attachment. Screenshot shows FHD/30/SDR/H.264; preview was black, so video delivery/recording remain unvalidated. Live installer reported writable root and reboot required. Host bundle has not yet been rebuilt. Original guest library and raw crash/decompilation/Frida evidence are private under ~/Library/Application Support/IPAResearch/kino/analysis/.
+
+
+Kino recording-state follow-through: virtual-camera-only handlers in CamFixExposure.m complete fixed custom exposure and ignore hardware white-balance mode changes, preventing two observed AVFoundation exceptions when entering recording. Other devices forward to original setters. libcamfix builds and live deployment reaches Kino's red screen-edge recording outline and stop/timer UI. No preview/sample flow or saved recording was validated. Root remains writable pending VM restart; host bundle remains unchanged.

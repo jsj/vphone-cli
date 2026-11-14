@@ -50,6 +50,27 @@ static CMTime cfx_max_frame_hook(id self, SEL _cmd) {
   return real;
 }
 
+// The synthetic camera has fixed exposure and no ISP to service custom
+// exposure requests. Complete with that fixed value instead of entering the
+// hardware-only setter (Kino's record transition otherwise throws).
+static IMP cfx_orig_custom_exposure;
+static void cfx_custom_exposure_hook(id self, SEL cmd, CMTime duration,
+                                     float iso, void (^completion)(CMTime)) {
+  if (cfx_is_vcam_device(self)) {
+    if (completion) completion(CFX_EXPOSURE);
+    return;
+  }
+  ((void (*)(id, SEL, CMTime, float, void (^)(CMTime)))cfx_orig_custom_exposure)(
+      self, cmd, duration, iso, completion);
+}
+
+static IMP cfx_orig_white_balance_mode;
+static void cfx_white_balance_mode_hook(id self, SEL cmd, NSInteger mode) {
+  // Synthetic frames have no hardware white-balance controls to lock.
+  if (cfx_is_vcam_device(self)) return;
+  ((void (*)(id, SEL, NSInteger))cfx_orig_white_balance_mode)(self, cmd, mode);
+}
+
 static void cfx_hook_getter(Class cls, SEL sel, IMP hook, IMP *orig) {
   Method m = class_getInstanceMethod(cls, sel);
   if (!m) return;
@@ -60,6 +81,10 @@ static void cfx_hook_getter(Class cls, SEL sel, IMP hook, IMP *orig) {
 void cfx_install_exposure_hooks(void) {
   Class cls = NSClassFromString(@"AVCaptureFigVideoDevice");
   if (!cls) return;
+  cfx_hook_getter(cls, @selector(setExposureModeCustomWithDuration:ISO:completionHandler:),
+                  (IMP)cfx_custom_exposure_hook, &cfx_orig_custom_exposure);
+  cfx_hook_getter(cls, @selector(setWhiteBalanceMode:),
+                  (IMP)cfx_white_balance_mode_hook, &cfx_orig_white_balance_mode);
   cfx_hook_getter(cls, @selector(lensAperture), (IMP)cfx_aperture_hook, &cfx_orig_aperture);
   cfx_hook_getter(cls, @selector(ISO), (IMP)cfx_iso_hook, &cfx_orig_iso);
   cfx_hook_getter(cls, @selector(exposureDuration), (IMP)cfx_exposure_hook, &cfx_orig_exposure);
