@@ -1,5 +1,16 @@
 # Patch Comparison: Regular / Development / Jailbreak / Experimental
 
+> **Camera session teardown guard (2026-10-29, local experiment).**
+> Chromagraph 1.3 build 113 aborts in libcamfix when AVFoundation queries
+> `isRunning` during `AVCaptureSession` deallocation and tracking attempts a
+> fatal weak registration. Tracking now uses `objc_storeWeakOrNil` followed by
+> a strong weak-load, skipping dying objects and retaining live ones through
+> table insertion. No firmware patch or preset changes. The host lifetime
+> harness covers live, nil and deallocating objects. On ios27.0.1 (24A446),
+> local bundle 2.13.4-local.9ee742a3, Chromagraph passes onboarding, opens its
+> library and Preferences, and survives a cold relaunch without a new crash.
+> The installed dylib hash matches the build. Camera capture is not validated.
+
 > **The iPhone17,3 presents its board (2026-10-25).**
 > `VPhoneGuestDevice.presentsBoard` no longer excludes the iPhone17,3; only the
 > XS Max keeps the shared tree. An iPhone17,3 guest now gets the separate

@@ -522,6 +522,14 @@ test-vcam-drive-gate:
 
 # Host proof harness for the crop, size and turn plan libcamfix uses for
 # AVCaptureVideoDataOutput frames.
+.PHONY: test-camfix-session-lifetime
+test-camfix-session-lifetime:
+	@mkdir -p $(OUT)
+	xcrun --sdk macosx clang -fobjc-arc -O1 -Wall -Wextra -Werror \
+		-ICamFix/Session -framework Foundation \
+		-o $(OUT)/CamFixSessionLifetimeTests Tests/CamFixSessionLifetimeTests.m
+	@$(OUT)/CamFixSessionLifetimeTests
+
 .PHONY: test-camfix-geometry
 test-camfix-geometry:
 	@mkdir -p $(OUT)
