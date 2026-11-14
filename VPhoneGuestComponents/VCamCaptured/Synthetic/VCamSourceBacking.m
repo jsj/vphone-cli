@@ -142,6 +142,21 @@ id vcc_build_backing(void) {
       // 8-bit SDR delivery: advertising HDR would be a lie AVF clients
       // would act on (tone mapping, EDR pipelines).
       @"HDRSupported" : @NO,
+      // Both published formats have the same maximum photo dimensions.
+      // Without this flag, clients selecting their best photo format find
+      // none and may derive an infinite focal length from a zero FOV.
+      @"HighPhotoQualitySupported" : @YES,
+      // AVFoundation maps isHighestPhotoQualitySupported to the backing's
+      // SISSupported bit on 24A446. For this synthetic source, still output
+      // is the already-rendered virtual frame (no physical sensor fusion).
+      @"SISSupported" : @YES,
+      // Simulated manual-exposure limits. Existing device state is ISO 100
+      // at 1/30 s. Zero endpoints cause 0/0 in clients' exposure controls.
+      // Fig takes integration time in microseconds and max gain in Q8.
+      @"ISOBase" : @25,
+      @"DefaultAEMaxGain" : @32768, // 25 * (32768 / 256) = ISO 3200
+      @"VideoMinIntegrationTime" : @100, // 1/10000 s
+      @"VideoMaxIntegrationTime" : @1000000, // 1 s at minimum 1 fps
       // We attach kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix to
       // every delivered sample with the principal point at frame center —
       // so intrinsic delivery is supported, referenced to the full frame.

@@ -620,3 +620,13 @@ build-executable-remap-probe:
 	@mkdir -p $(OUT)
 	xcrun --sdk iphoneos swiftc -target arm64-apple-ios26.0 -O Tests/ExecutableRemapProbe.swift -module-cache-path $(OUT)/probe-module-cache -o $(OUT)/ExecutableRemapProbe
 	codesign --force --sign - --timestamp=none $(OUT)/ExecutableRemapProbe
+
+# Read-only guest regression: inspect the actual AVFoundation exports.
+.PHONY: camera-format-probe
+camera-format-probe: $(OUT)/CameraFormatProbe
+
+$(OUT)/CameraFormatProbe: Tests/CameraFormatProbe.m
+	@mkdir -p $(OUT)
+	xcrun --sdk iphoneos clang $(COMMON_FLAGS) -Wno-deprecated-declarations \
+		-o $@ $< -framework Foundation -framework AVFoundation -framework CoreMedia
+	codesign --force --sign - $@
